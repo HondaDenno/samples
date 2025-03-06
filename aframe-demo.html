@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>基本ARアプリ</title>
+    
+    <!-- 信頼性の高いCDNリンクを使用 -->
+    <script src="https://aframe.io/releases/1.0.4/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js@3.3.1/aframe/build/aframe-ar.js"></script>
+    
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            position: fixed;
+            width: 100%;
+            height: 100%;
+        }
+        
+        /* Aframeスタイル修正 - 画面全体に表示 */
+        .a-canvas {
+            width: 100% !important;
+            height: 100% !important;
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            z-index: 1 !important;
+        }
+        
+        .a-enter-vr {
+            display: none !important;
+        }
+        
+        /* フルスクリーンレイアウト修正 */
+        canvas.a-canvas, #arjs-video {
+            width: 100% !important;
+            height: 100% !important;
+            object-fit: cover !important;
+        }
+        
+        .arjs-loader {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            z-index: 9999;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-size: 18px;
+        }
+        
+        #status {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            background-color: rgba(0, 0, 0, 0.6);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            z-index: 10;
+            font-size: 14px;
+        }
+        
+        #message {
+            position: fixed;
+            top: 20px;
+            left: 0;
+            width: 100%;
+            text-align: center;
+            background-color: rgba(0, 0, 0, 0.6);
+            color: white;
+            padding: 10px 0;
+            font-size: 16px;
+            font-weight: bold;
+            z-index: 10;
+        }
+        
+        #modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            z-index: 20;
+            display: none;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .modal-content {
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            width: 80%;
+            max-width: 300px;
+            text-align: center;
+        }
+        
+        input {
+            width: 90%;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin: 10px 0;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        
+        /* エフェクト用スタイル */
+        #successOverlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: white;
+            z-index: 9000;
+            opacity: 0;
+            transition: opacity 2s;
+            pointer-events: none;
+        }
+        
+        #failureOverlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(255, 0, 0, 0.3);
+            z-index: 9000;
+            opacity: 0;
+            transition: opacity 0.2s;
+            pointer-events: none;
+        }
+        
+        .explosion {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 100px;
+            height: 100px;
+            background-color: rgba(255, 50, 0, 0.8);
+            border-radius: 50%;
+            z-index: 9001;
+            display: none;
+            animation: explode 0.8s ease-out;
+        }
+        
+        @keyframes explode {
+            0% {
+                transform: translate(-50%, -50%) scale(0);
+                opacity: 1;
+            }
+            50% {
+                transform: translate(-50%, -50%) scale(1.5);
+                opacity: 0.8;
+            }
+            100% {
+                transform: translate(-50%, -50%) scale(3);
+                opacity: 0;
+            }
+        }
+        
+        .success-rays {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 0px;
+            height: 0px;
+            z-index: 9001;
+            display: none;
+            pointer-events: none;
+        }
+        
+        .ray {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100px;
+            background: linear-gradient(to top, rgba(255, 255, 255, 0), rgba(255, 255, 255, 1));
+            border-radius: 2px;
+            transform-origin: bottom center;
+            animation: ray-animation 2s linear infinite;
+        }
+        
+        @keyframes ray-animation {
+            0% {
+                opacity: 0;
+                transform: rotate(0deg) translateY(-150%);
+            }
+            20% {
+                opacity: 1;
+            }
+            100% {
+                opacity: 0;
+                transform: rotate(360deg) translateY(-150%);
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- ローディング画面 -->
+    <div class="arjs-loader">
+        <div>ARを読み込み中...お待ちください</div>
+    </div>
+    
+    <!-- ステータス表示 -->
+    <div id="status">状態: 初期化中...</div>
+    
+    <!-- メッセージ表示 -->
+    <div id="message"></div>
+    
+    <!-- 秘密の言葉入力モーダル -->
+    <div id="modal">
+        <div class="modal-content">
+            <h3>秘密の言葉を入力してください</h3>
+            <input type="text" id="secretInput" placeholder="秘密の言葉...">
+            <button id="submitBtn">送信</button>
+        </div>
+    </div>
+    
+    <!-- AR.js用のA-Frameシーン -->
+    <a-scene
+        vr-mode-ui="enabled: false"
+        embedded
+        arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; sourceWidth: 1280; sourceHeight: 960; displayWidth: 1280; displayHeight: 960;"
+        renderer="logarithmicDepthBuffer: true; precision: medium; antialias: true;"
+        id="scene">
+        
+        <!-- マーカー - 基本的なHiroマーカーを使用 -->
+        <a-marker preset="hiro" id="marker">
+            <!-- マーカー上に表示するテキスト -->
+            <a-text value="発見しました" color="red" scale="1 1 1" position="0 0.5 0" align="center" rotation="-90 0 0" id="markerText"></a-text>
+            
+            <!-- マーカー上のボックス（視認しやすくするため） -->
+            <a-box position="0 0.5 0" material="opacity: 0.5; color: red;" id="markerBox"></a-box>
+            
+            <!-- 爆発エフェクト（最初は非表示） -->
+            <a-entity id="explosionEffect" visible="false">
+                <a-sphere position="0 0.5 0" color="red" radius="0.2" animation="property: scale; from: 0.1 0.1 0.1; to: 2 2 2; dur: 1000; easing: easeOutQuad;"></a-sphere>
+                <a-sphere position="0 0.5 0" color="orange" radius="0.15" animation="property: scale; from: 0.1 0.1 0.1; to: 1.5 1.5 1.5; dur: 800; easing: easeOutQuad;"></a-sphere>
+                <a-sphere position="0 0.5 0" color="yellow" radius="0.1" animation="property: scale; from: 0.1 0.1 0.1; to: 1 1 1; dur: 600; easing: easeOutQuad;"></a-sphere>
+                <a-entity position="0 0.5 0" particle-system="preset: dust; particleCount: 100; color: #FF4500,#FF8C00; size: 0.5; duration: 1; maxAge: 1"></a-entity>
+            </a-entity>
+            
+            <!-- 成功エフェクト（最初は非表示） -->
+            <a-entity id="successEffect" visible="false">
+                <a-sphere position="0 0.5 0" color="#7DF9FF" radius="0.2" material="opacity: 0.7; emissive: #7DF9FF" animation="property: scale; from: 0.1 0.1 0.1; to: 3 3 3; dur: 2000; easing: easeOutQuad;"></a-sphere>
+                <a-sphere position="0 0.5 0" color="white" radius="0.15" material="opacity: 0.8; emissive: white" animation="property: scale; from: 0.1 0.1 0.1; to: 2 2 2; dur: 1800; easing: easeOutQuad;"></a-sphere>
+                <a-entity position="0 0.5 0" particle-system="preset: snow; particleCount: 100; color: white, #7DF9FF; size: 0.5; duration: 2; maxAge: 2"></a-entity>
+            </a-entity>
+        </a-marker>
+        
+        <!-- カメラ -->
+        <a-entity camera></a-entity>
+    </a-scene>
+    
+    <!-- エフェクト用オーバーレイ -->
+    <div id="successOverlay"></div>
+    <div id="failureOverlay"></div>
+    <div class="explosion" id="explosion"></div>
+    <div class="success-rays" id="successRays"></div>
+    
+    <script>
+        // A-Frame用コンポーネントの登録（パーティクルシステム）
+        AFRAME.registerComponent('particle-system', {
+            schema: {
+                preset: {default: 'dust'},
+                particleCount: {default: 100},
+                color: {default: 'white'},
+                size: {default: 1},
+                duration: {default: 1},
+                maxAge: {default: 1}
+            },
+            
+            init: function() {
+                this.pSystem = true;
+                // 実際のパーティクルシステムはモバイルの負荷を考慮して簡略化
+            }
+        });
+        
+        // 要素の取得
+        const status = document.getElementById('status');
+        const message = document.getElementById('message');
+        const loader = document.querySelector('.arjs-loader');
+        const modal = document.getElementById('modal');
+        const secretInput = document.getElementById('secretInput');
+        const submitBtn = document.getElementById('submitBtn');
+        const marker = document.getElementById('marker');
+        const scene = document.getElementById('scene');
+        const markerText = document.getElementById('markerText');
+        const markerBox = document.getElementById('markerBox');
+        const explosionEffect = document.getElementById('explosionEffect');
+        const successEffect = document.getElementById('successEffect');
+        const successOverlay = document.getElementById('successOverlay');
+        const failureOverlay = document.getElementById('failureOverlay');
+        const explosion = document.getElementById('explosion');
+        const successRays = document.getElementById('successRays');
+        
+        // モーダル表示状態を追跡するフラグ
+        let modalShown = false;
+        
+        // ページロード時の処理
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM読み込み完了');
+            updateStatus('DOM読み込み完了');
+            
+            // 光線エフェクト用の要素を生成
+            createLightRays();
+            
+            // 強制的にローダーを非表示にするタイマー
+            setTimeout(function() {
+                if (loader.style.display !== 'none') {
+                    console.log('タイムアウト: ローダーを強制的に非表示');
+                    loader.style.display = 'none';
+                    updateStatus('タイムアウト: マーカーをカメラに映してください');
+                    showMessage('Hiroマーカーをカメラに映してください');
+                }
+            }, 5000); // 5秒後にローダーを強制的に非表示
+        });
+        
+        // 光線エフェクト用の要素を生成する関数
+        function createLightRays() {
+            // 16本の光線を作成
+            for (let i = 0; i < 16; i++) {
+                const ray = document.createElement('div');
+                ray.className = 'ray';
+                ray.style.transform = `rotate(${i * 22.5}deg) translateY(-150%)`;
+                ray.style.animationDelay = `${i * 0.1}s`;
+                successRays.appendChild(ray);
+            }
+        }
+        
+        // AR.jsが読み込まれたら実行（window.onloadよりも信頼性が高い）
+        window.addEventListener('load', function() {
+            console.log('ページが完全に読み込まれました');
+            updateStatus('ページ読み込み完了');
+            
+            // フルスクリーン表示の修正（モバイル用）
+            fixFullScreenDisplay();
+            
+            // A-Frameシーンのロード完了を監視
+            if (scene) {
+                // シーンがすでに読み込まれている場合
+                if (scene.hasLoaded) {
+                    console.log('シーンはすでに読み込まれています');
+                    hideLoader();
+                } else {
+                    // シーンのロード完了イベントを待つ
+                    scene.addEventListener('loaded', function() {
+                        console.log('A-Frameシーンがロードされました');
+                        hideLoader();
+                    });
+                }
+            }
+            
+            // AR.jsカメラビデオが開始されたかを監視（代替方法）
+            const checkARVideoStarted = setInterval(function() {
+                const video = document.querySelector('.a-canvas');
+                if (video) {
+                    console.log('ARビデオ要素が見つかりました');
+                    clearInterval(checkARVideoStarted);
+                    hideLoader();
+                }
+            }, 1000);
+            
+            // マーカー検出イベント
+            if (marker) {
+                marker.addEventListener('markerFound', function() {
+                    console.log('マーカーが検出されました');
+                    updateStatus('マーカー検出: 成功');
+                    showMessage('マーカーを検出しました！');
+                    
+                    // まだモーダルが表示されていない場合のみ表示
+                    if (!modalShown) {
+                        setTimeout(function() {
+                            modal.style.display = 'flex';
+                            modalShown = true; // モーダルが表示されたことを記録
+                        }, 1000);
+                    }
+                });
+                
+                marker.addEventListener('markerLost', function() {
+                    console.log('マーカーを見失いました');
+                    updateStatus('マーカー検出: 未検出');
+                    
+                    // モーダルが表示されていない場合のみメッセージを更新
+                    if (!modalShown) {
+                        showMessage('マーカーを見失いました。再度カメラに映してください');
+                    } else {
+                        // モーダルが表示されている場合は何もしない
+                        showMessage('秘密の言葉を入力してください');
+                    }
+                    
+                    // モーダルが表示されていても閉じない
+                });
+            } else {
+                console.error('マーカー要素が見つかりません');
+                updateStatus('エラー: マーカー要素が見つかりません');
+            }
+        });
+        
+        // フルスクリーン表示の修正（モバイル用）
+        function fixFullScreenDisplay() {
+            // AR.js videoの取得を試みる
+            setTimeout(function() {
+                const arVideo = document.querySelector('#arjs-video');
+                if (arVideo) {
+                    console.log('AR.js videoを検出しました');
+                    // ビデオ要素のスタイルを調整
+                    arVideo.style.width = '100%';
+                    arVideo.style.height = '100%';
+                    arVideo.style.objectFit = 'cover';
+                    arVideo.style.position = 'absolute';
+                    arVideo.style.top = '0';
+                    arVideo.style.left = '0';
+                    arVideo.style.zIndex = '1';
+                }
+                
+                // Canvasのスタイル調整
+                const canvas = document.querySelector('canvas.a-canvas');
+                if (canvas) {
+                    canvas.style.width = '100%';
+                    canvas.style.height = '100%';
+                    canvas.style.position = 'absolute';
+                    canvas.style.top = '0';
+                    canvas.style.left = '0';
+                    canvas.style.zIndex = '2';
+                }
+            }, 1000);
+        }
+        
+        // ローダーを非表示にする関数
+        function hideLoader() {
+            loader.style.display = 'none';
+            updateStatus('カメラアクセス完了 - マーカーをカメラに映してください');
+            showMessage('Hiroマーカーをカメラに映してください');
+        }
+        
+        // 秘密の言葉の確認
+        submitBtn.addEventListener('click', function() {
+            const secret = secretInput.value.trim();
+            modal.style.display = 'none';
+            
+            if (secret === 'abc') {
+                // 正解の場合
+                showMessage('正解です！遷移します...');
+                updateStatus('秘密の言葉: 正解');
+                
+                // 成功エフェクトを表示
+                showSuccessEffect();
+                
+                // 遷移先URL
+                setTimeout(function() {
+                    window.location.href = 'https://example.com';
+                }, 3000);
+            } else {
+                // 不正解の場合
+                showMessage('不正解です！再度マーカーを検出してください');
+                updateStatus('秘密の言葉: 不正解');
+                
+                // 爆発エフェクトを表示
+                showExplosionEffect();
+                
+                // モーダルフラグをリセット（再検出を促す）
+                modalShown = false;
+            }
+        });
+        
+        // 成功エフェクトを表示する関数
+        function showSuccessEffect() {
+            // マーカー上のテキストとボックスを非表示
+            markerText.setAttribute('visible', 'false');
+            markerBox.setAttribute('visible', 'false');
+            
+            // A-Frame内のエフェクトを表示
+            successEffect.setAttribute('visible', 'true');
+            
+            // 画面上のエフェクトを表示
+            successRays.style.display = 'block';
+            
+            // 光線エフェクトをアニメーション
+            setTimeout(function() {
+                successRays.style.width = '300px';
+                successRays.style.height = '300px';
+                
+                // 白いオーバーレイを徐々に表示
+                successOverlay.style.display = 'block';
+                setTimeout(function() {
+                    successOverlay.style.opacity = '1';
+                }, 100);
+            }, 500);
+        }
+        
+        // 爆発エフェクトを表示する関数
+        function showExplosionEffect() {
+            // マーカー上のエフェクトを表示
+            explosionEffect.setAttribute('visible', 'true');
+            
+            // 画面上の爆発エフェクトを表示
+            explosion.style.display = 'block';
+            
+            // 赤いフラッシュエフェクト
+            failureOverlay.style.display = 'block';
+            failureOverlay.style.opacity = '1';
+            
+            // エフェクトをリセット
+            setTimeout(function() {
+                explosionEffect.setAttribute('visible', 'false');
+                failureOverlay.style.opacity = '0';
+                
+                setTimeout(function() {
+                    explosion.style.display = 'none';
+                    failureOverlay.style.display = 'none';
+                    
+                    // マーカーがまだ検出されていれば、元の表示に戻す
+                    if (marker && marker.object3D.visible) {
+                        markerText.setAttribute('visible', 'true');
+                        markerBox.setAttribute('visible', 'true');
+                    }
+                }, 500);
+            }, 1000);
+        }
+        
+        // ステータス更新関数
+        function updateStatus(text) {
+            status.textContent = '状態: ' + text;
+            console.log('ステータス更新: ' + text);
+        }
+        
+        // メッセージ表示関数
+        function showMessage(text) {
+            message.textContent = text;
+            console.log('メッセージ: ' + text);
+        }
+    </script>
+</body>
+</html>
